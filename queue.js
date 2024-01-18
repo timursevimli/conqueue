@@ -31,11 +31,8 @@ class Queue {
   static channels(concurrency, size) {
     return new Queue(concurrency, size);
   }
-  // racePartialSettled
-  // raceSettled
-  // successfulRace
-  // successRace
-  static race(tasks = [], options = {}) {
+
+  static successOnlyRace(tasks = [], options = {}) {
     const { process = null, concurrency = tasks.length, timeout } = options;
 
     return new Promise((resolve, reject) => {
@@ -53,7 +50,7 @@ class Queue {
           queue.clear();
         })
         .drain(() => {
-          reject('Not have successful result');
+          reject(new Error('Not have successful result'));
         });
 
       for (const task of tasks) queue.add(task);
@@ -83,6 +80,34 @@ class Queue {
             return void reject(err);
           }
           results.push(res);
+        })
+        .drain(() => void resolve(results));
+
+      for (const task of tasks) queue.add(task);
+    });
+  }
+
+  static allSettled(tasks = [], options = {}) {
+    const { process = null, concurrency = tasks.length, timeout } = options;
+
+    const results = new Array(tasks.length).fill(null);
+
+    return new Promise((resolve) => {
+      let index = 0;
+      const queue = new Queue(concurrency);
+
+      if (process) queue.process(process);
+      if (typeof timeout === 'number' && timeout > 0) {
+        queue.timeout(timeout);
+      }
+
+      queue
+        .done((err, { res }) => {
+          if (err) {
+            results[index++] = { status: 'rejected', reason: err.message };
+          } else {
+            results[index++] = { status: 'fullfilled', result: res };
+          }
         })
         .drain(() => void resolve(results));
 
